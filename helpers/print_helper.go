@@ -38,7 +38,7 @@ func PadString(message string, size int)string{
 	Write message to file
  */
 func(pHelper *PrintHelper)WriteToFile(message string, path string){
-	file, _ := os.OpenFile("text.log",
+	file, _ := os.OpenFile(path,
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	file.WriteString(message + "\n")
 	file.Close()

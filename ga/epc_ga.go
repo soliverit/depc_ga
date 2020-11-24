@@ -1,11 +1,11 @@
 package ga
+
 import (
 	"../csv"
 	"../helpers"
 	"math/rand"
 	"os"
 	"sort"
-	"strconv"
 )
 const LOG_PATH string = "c:/repos/ga_results.txt"
 type EpcGA struct{
@@ -20,7 +20,7 @@ type EpcGA struct{
 	costHeaderIndices	[]int
 	population			[]GAState
 	initialPopulation	int
-	crossoverRate		float32
+	CrossoverRate		float32
 	childCount			int
 	maxPopulation		int
 }
@@ -28,7 +28,7 @@ type EpcGA struct{
 /*
 	Create a new EpcGA, an extension of BaseGA for residential EPC data
  */
-func CreateEpcGA(bReader *csv.BuildingReader, iterations int, initialPopulation int,  packages []string) *EpcGA{
+func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int, packages []string) *EpcGA{
 	/*
 		Create the output
 	 */
@@ -41,12 +41,19 @@ func CreateEpcGA(bReader *csv.BuildingReader, iterations int, initialPopulation 
 	epcGA.scorer			= CreateEPCScorer(epcGA.data)
 	/*
 		Do default internal stuff
+
+		-------- Best ---
+		crossoverRate:	0.15
+		childCount:		10
+		maxPopulation:	30
+		hardness:		0.1
 	 */
-	epcGA.initialPopulation	= initialPopulation
-	epcGA.population		= make([]GAState,initialPopulation)
-	epcGA.crossoverRate		= 0.2
-	epcGA.childCount		= 5
-	epcGA.maxPopulation		= 25
+
+	epcGA.maxPopulation		= maxPopulation
+	epcGA.population		= make([]GAState,epcGA.maxPopulation)
+	epcGA.CrossoverRate		= 0.15
+	epcGA.childCount		= 10
+	epcGA.Hardness			= 0.1 //Best 0.1 with crossoverRate of 0.15
 	//Prepare arrays TODO: See below, put in Struct
 	epcGA.costHeaders		= make([]string, len(packages))
 	epcGA.effHeaders		= make([]string, len(packages))
@@ -116,7 +123,6 @@ func(ga *EpcGA) Best() float32{
 }
 func(ga *EpcGA)Run(){
 	var ph helpers.PrintHelper
-	var run bool = true
 	/*
 		Create Life! (default-state GAState)
 	 */
@@ -125,42 +131,29 @@ func(ga *EpcGA)Run(){
 		stateRecords[i] = CreateGAStateRecord(-1,-1)
 	}
 	var baseGAState = CreateGAState(stateRecords)
-	/*
-		Create base population
-	 */
-	ph.P("Starting GA")
-	ph.P("Create the base population")
-	var score float32
+
 	for i := 0; i < ga.maxPopulation; i++{
 		ga.population[i] = ga.CreateMutation(baseGAState)
-		score = ga.scorer.Score(ga.population[i])
-		ph.P("Score of " + strconv.Itoa(i) + "\t" + strconv.FormatFloat(float64(score),'f', 6,32))
 	}
 	/*
 		Do the main process
-			-
 	 */
 	var candidateStates []GAState 	= make([]GAState, ga.maxPopulation * ga.childCount + ga.maxPopulation)
 	//Add existing population to the candidates (immortality exists apparently)
 	for i := 0; i < ga.maxPopulation; i++{
 		candidateStates[i] = ga.population[i]
 	}
-	var roundID int 				= 0
 	var randomInt int
-
 	/*=====================
 		Temp, delete log file
 	=======================*/
 	os.Remove(LOG_PATH)
-	os.Create(LOG_PATH)
-	for ; run;{
-		/*
-			Round counter: Nicety for now, useful later
-		 */
-		roundID += 1
+	f, _ := os.Create(LOG_PATH)
+	f.Close()
+	for roundID := 0; roundID < ga.iterations; roundID++{
 		for i := 0; i < len(ga.population); i++{
 			for childID := 0; childID < ga.childCount; childID++ {
-				if rand.Float32() < ga.crossoverRate {
+				if rand.Float32() < ga.CrossoverRate {
 					/*
 						Find another GAState to procreate with (bow chaka wow wow!)
 					 */
@@ -186,24 +179,24 @@ func(ga *EpcGA)Run(){
 			spaces in society. Highest EpcGA.maxPopulation results get to live
 		*/
 		sort.Slice(candidateStates, func(i, j int) bool {
-			return ga.scorer.Score(candidateStates[i]) > ga.scorer.Score(candidateStates[j])
+			return ga.scorer.Score(&candidateStates[i]) < ga.scorer.Score(&candidateStates[j])
 		})
-		ga.population = candidateStates[0:ga.maxPopulation - 1]
+		ga.population 	= candidateStates[0:ga.maxPopulation - 1]
 		/*
 			Print and log stuff
 		 */
-		ph.P("Round " + strconv.Itoa(roundID) +
-				"\t scored: " +
-				strconv.FormatFloat(float64(ga.scorer.Score(ga.population[0])), 'f',6,32))
-		ph.WriteToFile(strconv.FormatFloat(float64(ga.scorer.Score(ga.population[0])), 'f',6,32),
-			LOG_PATH)
-	}
 
+		ph.WriteToFile(ga.population[0].ToCSV(), LOG_PATH)
+	}
+	ph.P("Scored: " + ga.population[0].ToCSV())
+}
+func(ga *EpcGA)ScoreGAstate(populationID int)float64{
+	return float64(ga.scorer.Score(&ga.population[populationID]))
 }
 func(ga *EpcGA)Crossover(state1 GAState, state2 GAState)GAState{
 	var states []GAStateRecord = make([]GAStateRecord, ga.data.Length())
 	for i := 0; i < ga.data.Length();i++{
-		if rand.Float32() < ga.crossoverRate{
+		if rand.Float32() < ga.CrossoverRate{
 			states[i] = CreateGAStateRecord(
 				state2.entityStates[i].efficiencyIndex,
 				state2.entityStates[i].costIndex)
@@ -224,7 +217,7 @@ func(ga *EpcGA)CreateMutation(baseState GAState)GAState{
 	var states		[]GAStateRecord	= make([]GAStateRecord, ga.data.Length())
 	for i := 0; i < ga.data.Length(); i++{
 		rnd = rand.Float32()
-		if ga.Hardness < rnd{
+		if ga.Hardness > rnd{
 			stateIDX	= rand.Intn(len(ga.effHeaderIndices)) - 1
 			if stateIDX == -1{
 				states[i] = CreateGAStateRecord(

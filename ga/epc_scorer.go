@@ -18,7 +18,7 @@ func CreateEPCScorer(data *csv.BuildingReader) *EPCScorer{
 /*
 	Score the input GAState
  */
-func(epcScorer *EPCScorer) Score(gaState GAState)float32{
+func(epcScorer *EPCScorer) Score(gaState *GAState)float32{
 	/*
 		If the Score has been calculated already, return it.
 	 */
@@ -44,7 +44,7 @@ func(epcScorer *EPCScorer) Score(gaState GAState)float32{
 		TODO: 	This should be a map with multiple costs. Eventually,
 				change GAState.cost to map[string]float32
 	 */
-	gaState.SetScore(points / cost)
+	gaState.SetScore(cost, points)
 	return gaState.score
 }
 
