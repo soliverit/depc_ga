@@ -92,6 +92,15 @@ func(bReader *BuildingReader)WriteToFile(path string){
 	}
 	file.Close()
 }
+func(bReader *BuildingReader)Sample(size float32 )*BuildingReader{
+	var length int = int(float32(bReader.Length()) *  size)
+	var output BuildingReader
+	output.rows	= make([]Building, length)
+	for i := 0; i < length; i++{
+		output.rows[i] = bReader.rows[i]
+	}
+	return &output
+}
 
 
 

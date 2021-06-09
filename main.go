@@ -7,14 +7,15 @@ import (
 	"./optimiser"
 	bayesopt "go-bayesopt"
 	"math/rand"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
-const PATH string 		= "C:\\repos\\depc_emulator\\data\\epc_data\\"
+const PATH string 		= "C:\\repos\\__shared_data__\\"
 const CERTS string 		= "certificates.csv"
 const OUTPUT string 	= "indices.csv"
 const RETROFITS string	= "retrofits.csv"
-const LOCATION string	= PATH + "domestic-E06000002-Middlesbrough\\"
+const LOCATION string	= PATH + "Middlesbrough\\"
 const GA_PATH string	= LOCATION + RETROFITS
 const GA_TARGETS string	= LOCATION + "targets.csv"
 var RETROFIT_LABELS 	= []string{"envelopes_hotwater_roof_windows",
@@ -50,6 +51,8 @@ var RETROFIT_TARGET_LABELS = []string{
  */
 const OPTIMISE bool = true
 func main() {
+	doWeatherNN()
+	return
 	rand.Seed(1)
 	/*
 		Do helpers
@@ -61,7 +64,7 @@ func main() {
 		Parse main data
 	 */
 	var data	csv.BuildingReader	= csv.ParseBuildingCSV(GA_PATH, false)
-	ph.P("Data loaded - " +strconv.Itoa(data.Length()) + " records")
+	ph.P("Data loaded - " + strconv.Itoa(data.Length()) + " records")
 
 	/*
 		Subtract original ratings from all values
@@ -69,8 +72,6 @@ func main() {
 	var targets csv.BuildingReader 	= csv.ParseBuildingCSV(GA_TARGETS,false)
 	var targetLength int			= targets.Length()
 	var targetsColumnIDX int		= targets.ColumnNameToIndex("energyEfficiency")
-
-
 	var subtractColumns	[]int		= make([]int, len(RETROFIT_TARGET_LABELS))
 	for i := 0; i < len(subtractColumns); i++{
 		subtractColumns[i] = data.ColumnNameToIndex(RETROFIT_TARGET_LABELS[i] + "-Eff")
@@ -85,9 +86,8 @@ func main() {
 		}
 	}
 	for i := 0; i < targetLength; i++{
-		if data.Building(i).Cell(0) != -9999{
+		if data.Building(i).Cell(0) != -9999 {
 			data.Building(i).Subtract(targets.Row(i).Cell(targetsColumnIDX),subtractColumns)
-
 		}
 	}
 	/*
@@ -95,7 +95,7 @@ func main() {
 	 */
 	data.RemoveCorrupt()
 	ph.P("Data cleansed - " + strconv.Itoa(data.Length()) + " records")
-
+	data = *data.Sample(0.5)
 	if OPTIMISE{
 		print("\nSHOE")
 		var bayesOpt optimiser.GAOptimiser = optimiser.CreateBayesOptimiser()
@@ -118,6 +118,9 @@ func main() {
 				}
 			}
 			epcGA.Run()
+			/*
+				fmt.Println("V:" + strconv.FormatFloat(epcGA.ScoreGAstate(0),'f',2,64))
+			 */
 			return epcGA.ScoreGAstate(0)
 		})
 
@@ -138,4 +141,14 @@ func main() {
 		epcGA.Run()
 	}
 }
+func doWeatherNN(){
+	/*
+		data path
+	 */
+	var pathPattern string = "c:\\repos\\__shared_data__\\ml_anon\\*\\model_epc.inp"
+	paths, _ := filepath.Glob(pathPattern)
+	for i := 0; i < len(paths); i++{
 
+	}
+
+}
