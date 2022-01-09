@@ -3,7 +3,6 @@ package csv
 import (
 	"io/ioutil"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -97,17 +96,10 @@ func (easyReader *EasyReader) WriteColumnsToFile(path string, columns []string) 
 }
 func (easyReader *EasyReader) ColumnNameToIndex(name string) int {
 	for i := 0; i < len(easyReader.headers.cells); i++ {
-
 		if easyReader.headers.cells[i] == name {
-			//println(easyReader.headers.cells[i])
 			return i
 		}
 	}
-	print("\n" + strconv.Itoa(len(easyReader.headers.cells)))
-	print("\n" + strings.Join(easyReader.rows[0].cells, ","))
-	print("\n" + easyReader.headers.ToString())
-	println("\n" + name)
-	os.Exit(92929)
 	return -1
 }
 func (easyReader *EasyReader) Join(joinER *EasyReader) {

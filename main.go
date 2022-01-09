@@ -67,10 +67,6 @@ func main() {
 		Parse main data
 	*/
 	var data csv.BuildingReader = csv.ParseBuildingCSV(GA_PATH, false)
-	println("---___---")
-	println(data.Headers().ToString())
-	println(strconv.Itoa(data.Length()))
-	println("\n")
 	ph.P("Data loaded - " + strconv.Itoa(data.Length()) + " records")
 
 	/*
