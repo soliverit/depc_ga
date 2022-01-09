@@ -3,91 +3,82 @@ package csv
 import (
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 )
 
-type EasyReader struct{
-	path 		string
-	delimiter 	string
-	rows		[]Row
-	headers		Row
-}
-/*
-	Add Row
- */
-func(eReader * EasyReader) AddRow(row Row){
-	eReader.rows = append(eReader.rows, row)
+type EasyReader struct {
+	path      string
+	delimiter string
+	rows      []Row
+	headers   Row
+	Headers   Row
 }
 
 /*
-	Get Row
- */
-func(eReader *EasyReader) Row(idx int)*Row{
-	return &eReader.rows[idx]
-}
-/*
-	Number of Rows
- */
-func(eReader *EasyReader)Length()int{
-	return len(eReader.rows)
-}
-/*
 	New Table From Headers
- */
-func CreateEasyReader(path string,headers []string) *EasyReader{
+*/
+func CreateEasyReader(path string, headers []string) *EasyReader {
 	var eReader *EasyReader = &EasyReader{}
-	eReader.path			= path
-	eReader.headers 		= NewRow(headers)
-	eReader.rows			= make([]Row, 0)
+	eReader.path = path
+	eReader.headers = NewRow(headers)
+	eReader.Headers = eReader.headers
+	eReader.rows = make([]Row, 0)
+
 	return eReader
 }
 
 /*
 	Parse a CSV to EasyReader
- */
-func ParseCSV(path string)*EasyReader{
-	var eReader EasyReader 	= EasyReader{path:path}
-	eReader.rows 			= make([]Row,0)
-	csv, _ 					:= ioutil.ReadFile(path)
-	var curPos int 			= 0
+*/
+func ParseCSV(path string) *EasyReader {
+	var eReader EasyReader = EasyReader{path: path}
+	eReader.rows = make([]Row, 0)
+	csv, _ := ioutil.ReadFile(path)
+	var curPos int = 0
 
 	/*
 		Read headers
-	 */
-	for i := 0; ; i++{
-		if csv[i] == '\n'{
-			eReader.headers = StringToRow(string(csv[curPos : i]))
+	*/
+	for i := 0; ; i++ {
+		if csv[i] == '\n' {
+			eReader.headers = StringToRow(string(csv[curPos:i]))
+			eReader.Headers = eReader.headers
+			//print("..")
+			//println(string(csv[curPos:i]))
+
 			curPos = i + 1
 			break
 		}
 	}
 	/*
 		Read rows
-	 */
-	for i := curPos; i < len(csv) ; i++{
-		if csv[i] == '\n'{
-			eReader.rows = append(eReader.rows,StringToRow(string(csv[curPos : i])))
+	*/
+	for i := curPos; i < len(csv); i++ {
+		if csv[i] == '\n' {
+			eReader.rows = append(eReader.rows, StringToRow(string(csv[curPos:i])))
 			curPos = i + 1
 		}
 	}
 	/*
 		Append the last row
-	 */
-	if curPos < len(csv){
-		eReader.rows = append(eReader.rows, StringToRow(string(csv[curPos : len(csv) - curPos])))
+	*/
+	if curPos < len(csv) {
+		eReader.rows = append(eReader.rows, StringToRow(string(csv[curPos:len(csv)-curPos])))
 	}
 	return &eReader
 }
-func(easyReader * EasyReader) Save(){
+func (easyReader *EasyReader) Save() {
 	easyReader.WriteColumnsToFile(easyReader.path, easyReader.headers.cells)
 }
-func(easyReader * EasyReader)WriteColumnsToFile(path string, columns []string){
+
+func (easyReader *EasyReader) WriteColumnsToFile(path string, columns []string) {
 	output, _ := os.Create(path)
 	var headers []int = make([]int, len(columns))
 	var foundCount int = 0
 	for i := 0; i < len(columns); i++ {
 		for x := 0; x < len(easyReader.headers.cells); x++ {
-			if easyReader.headers.cells[x] == columns[i]{
+			if easyReader.headers.cells[x] == columns[i] {
 				headers[foundCount] = x
 				foundCount++
 				break
@@ -95,36 +86,64 @@ func(easyReader * EasyReader)WriteColumnsToFile(path string, columns []string){
 		}
 	}
 	output.WriteString(strings.Join(columns, ",") + "\n")
-	var cells []string = make([]string,len(columns))
-	for i := 0; i < easyReader.Length(); i++{
-		for x := 0; x < len(columns); x++{
+	var cells []string = make([]string, len(columns))
+	for i := 0; i < easyReader.Length(); i++ {
+		for x := 0; x < len(columns); x++ {
 			cells[x] = easyReader.rows[i].cells[headers[x]]
 		}
-		output.WriteString(strings.Join(cells,",")+ "\n")
+		output.WriteString(strings.Join(cells, ",") + "\n")
 	}
 	output.Close()
 }
-func(eReader * EasyReader)ColumnNameToIndex(name string)int{
-	for i := 0; i < len(eReader.headers.cells); i++{
-		if eReader.headers.cells[i] == name{
+func (easyReader *EasyReader) ColumnNameToIndex(name string) int {
+	for i := 0; i < len(easyReader.headers.cells); i++ {
+
+		if easyReader.headers.cells[i] == name {
+			//println(easyReader.headers.cells[i])
 			return i
 		}
 	}
+	print("\n" + strconv.Itoa(len(easyReader.headers.cells)))
+	print("\n" + strings.Join(easyReader.rows[0].cells, ","))
+	print("\n" + easyReader.headers.ToString())
+	println("\n" + name)
+	os.Exit(92929)
 	return -1
 }
-func(eReader *EasyReader)Join(joinER *EasyReader){
-	eReader.headers.cells = append(eReader.headers.cells, joinER.headers.cells...)
+func (easyReader *EasyReader) Join(joinER *EasyReader) {
+	easyReader.headers.cells = append(easyReader.headers.cells, joinER.headers.cells...)
 	var temp []string
-	var rowCount int 	= eReader.Length()
-	var joinCount int	= len(joinER.headers.cells)
-	for rowID := 0; rowID < rowCount; rowID++{
+	var rowCount int = easyReader.Length()
+	var joinCount int = len(joinER.headers.cells)
+	for rowID := 0; rowID < rowCount; rowID++ {
 		temp = make([]string, joinCount)
-		for cellID := 0; cellID < len(joinER.headers.cells); cellID++{
+		for cellID := 0; cellID < len(joinER.headers.cells); cellID++ {
 			temp[cellID] = joinER.rows[rowID].cells[cellID]
 		}
-		eReader.rows[rowID].cells = append(eReader.rows[rowID].cells, temp...)
+		easyReader.rows[rowID].cells = append(easyReader.rows[rowID].cells, temp...)
 	}
 }
-func(eReader *EasyReader)CellCount()int{
-	return len(eReader.headers.cells)
+func (easyReader *EasyReader) CellCount() int {
+	return len(easyReader.headers.cells)
+}
+
+/*
+	Get Row
+*/
+func (easyReader *EasyReader) Row(idx int) *Row {
+	return &easyReader.rows[idx]
+}
+
+/*
+	Add Row
+*/
+func (easyReader *EasyReader) AddRow(row Row) {
+	easyReader.rows = append(easyReader.rows, row)
+}
+
+/*
+	Number of Rows
+*/
+func (easyReader *EasyReader) Length() int {
+	return len(easyReader.rows)
 }
