@@ -3,8 +3,15 @@ package csv
 import (
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 )
+
+/*
+ These properties have dedicated properties in the Building object. The
+ rest of the CSV is groups three per retrofit (EPC-L2 for example).
+*/
+var BUILDING_BASE_PROPERTIES = []string{"building_id", "area", "net_needed_epc_index_diff"}
 
 type BuildingReader struct {
 	EasyReader EasyReader
@@ -32,29 +39,94 @@ func ParseBuildingCSV(path string, skipCorruptRecords bool) BuildingReader {
 			break
 		}
 	}
-
+	/*
+		Do header indices (split Building props and []Retrofit columns
+	*/
+	var areaIndex = 0
+	var buildingIDIndex = 0
+	var epcDiffIndex = 0
+	for idx, header := range bReader.Headers().Cells {
+		if header == "area" {
+			areaIndex = idx
+		} else if header == "building_id" {
+			buildingIDIndex = idx
+		} else if header == "net_needed_epc_index_diff" {
+			epcDiffIndex = idx
+		}
+	}
 	/*
 		Read rows
 	*/
-	var tempLine string
-	for i := curPos; i < len(csv); i++ {
-		if csv[i] == '\n' {
-			tempLine = string(csv[curPos:i])
+	for i := curPos; i <= len(csv); i++ {
+		if csv[i] == '\n' || i == len(csv) {
 			/*
-				Lines with -9999 didn't have enough data. Skip them
+			 We need to handle the last line in this block. Otherwise, we'd
+			 recode this for it, outside this loop.
 			*/
-			if skipCorruptRecords && strings.Contains(tempLine, "-9") {
-				continue
+			if i == len(csv) {
+				i -= 1
 			}
-
 			/*
 				Parse Building then identify all applicable retrofits
 			*/
-			bReader.rows = append(bReader.rows, CreateBuilding(tempLine))
-
+			cells := strings.Split(string(csv[curPos:i]), ",")
 			/*
-				Update counter(s)
+			 Map the Retrofit properties. I did try just creating a Retrofit
+			 for each code in a single map but Kept getting "Cannot assign Cost"
+			 error.
 			*/
+			costs := make(map[string]float32)
+			savings := make(map[string]float32)
+			epcDiffs := make(map[string]float32)
+			codes := make([]string, 0)
+			for cellID := 0; cellID < len(cells); cellID++ {
+				if cellID != areaIndex && cellID != epcDiffIndex && cellID != buildingIDIndex {
+					/*
+					 Get Reco codes and prepare them
+					*/
+					header := bReader.Headers().Cells[cellID]
+					splitHeader := strings.Split(header, "-")
+					code := splitHeader[0] + "-" + splitHeader[1]
+					codes = append(codes, code)
+					if _, ok := costs[code]; !ok {
+						costs[code] = 0
+						savings[code] = 0
+						epcDiffs[code] = 0
+					}
+					// Get the cell value as float32
+					tempValue, _ := strconv.ParseFloat(cells[cellID], 32)
+					value := float32(tempValue)
+					if splitHeader[2] == "cost" {
+						costs[code] = value
+					} else if splitHeader[2] == "savings" {
+						savings[code] = value
+					} else if splitHeader[2] == "epc_index_diff" {
+						epcDiffs[code] = value
+					}
+				}
+			}
+			/*
+			 Prepare common values
+			*/
+			area64, _ := strconv.ParseFloat(cells[areaIndex], 32)
+			epcDiff64, _ := strconv.ParseFloat(cells[epcDiffIndex], 32)
+			buildingID, _ := strconv.Atoi(cells[buildingIDIndex])
+			building := CreateBuilding(buildingID, float32(area64), float32(epcDiff64))
+			/*
+				Add Retrofits
+			*/
+			// Do nothing
+			building.AddRetrofit("AS-IS", 0, 0, 0)
+			// The rest
+			for _, code := range building.PossibleRetrofits {
+				building.AddRetrofit(code, costs[code], savings[code], epcDiffs[code])
+			}
+			/*
+			 Finish up
+			*/
+			// Add building to data set
+			bReader.rows = append(bReader.rows, building)
+			// Update csvString position
 			curPos = i + 1
 		}
 	}

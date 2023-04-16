@@ -20,33 +20,17 @@ const LOCATION string = PATH + "domestic-E06000004-Stockton-on-Tees\\"
 const GA_PATH string = LOCATION + RETROFITS
 const GA_TARGETS string = LOCATION + "targets.csv"
 
-var RETROFIT_LABELS = []string{"envelopes_hotwater_roof_windows",
-	"envelopes_hotwater_roof",
-	"envelopes_hotwater_windows",
-	"envelopes_hotwater",
-	"envelopes_roof_windows",
-	"envelopes_roof",
-	"envelopes_windows",
-	"envelopes",
-	"hotwater_roof_windows",
-	"hotwater_roof",
-	"hotwater_windows",
-	"hotwater",
-	"roof_windows",
-	"roof",
-	"windows"}
-var RETROFIT_TARGET_LABELS = []string{
-	"hotwater",
-	"hotwater_envelopes",
-	"roof_envelopes",
-	"windows_envelopes",
-	"envelopes",
-	"roof_hotwater",
-	"hotwater_windows",
-	"hotwater",
-	"roof_windows",
-	"roof",
-	"windows"}
+var RETROFIT_LABELS = []string{"ENV-EXT",
+	"ENV-INT", "EPC-C2", "EPC-E2", "EPC-E4", "EPC-E8",
+	"EPC-H1", "EPC-H7", "EPC-H8", "EPC-L2", "EPC-L5",
+	"EPC-L8", "EPC-R4", "EPC-R5", "EPC-V1", "EPC-W1",
+	"EPC-W2", "ESO-STR", "HVC-AFM", "HVC-DSF", "HVC-GTA",
+	"HVC-OTA", "HVC-RAD", "HVC-WET", "LIG-12L", "LIG-12O",
+	"LIG-5LL", "LIG-8LO", "LIG-CFL", "LIG-CFO", "LIG-DLD",
+	"LIG-EFL", "LIG-EFO", "LIG-HLU", "LIG-HMO", "LIG-HPL",
+	"LIG-HSO", "LIG-MHL", "LIG-MHO", "LIG-PIR", "LIG-T5O",
+	"STR-ASU", "STR-BFT", "STR-BST", "STR-BTA", "STR-BTB",
+	"STR-BTC", "STR-BTD", "STR-BTE"}
 
 /*
 	dhw, dhw-env, dhw-win, dhw-roof

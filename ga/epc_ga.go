@@ -14,7 +14,7 @@ type EpcGA struct {
 	data   *csv.BuildingReader
 	scorer *EPCScorer
 	//Building state options
-	buildingRetorfits [][]int
+	//buildingRetorfits [][]int
 	effHeaders        []string
 	effHeaderIndices  []int
 	costHeaders       []string
