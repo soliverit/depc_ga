@@ -12,11 +12,11 @@ import (
 	"strings"
 )
 
-const PATH string = "C:\\repos\\__sbared_data__\\depc\\"
+const PATH string = "C:\\workspaces\\__shared_data__\\depc\\"
 const CERTS string = "certificates.csv"
 const OUTPUT string = "indices.csv"
 const RETROFITS string = "retrofits.csv"
-const LOCATION string = PATH + "domestic-E06000004-Stockton-on-Tees\\"
+const LOCATION string = PATH + "domestic-E06000002-Middlesbrough\\"
 const GA_PATH string = LOCATION + RETROFITS
 const GA_TARGETS string = LOCATION + "targets.csv"
 
@@ -49,8 +49,8 @@ var RETROFIT_TARGET_LABELS = []string{
 	"windows"}
 
 /*
-	dhw, dhw-env, dhw-win, dhw-roof
-	roof, roof-env, roof-win,
+dhw, dhw-env, dhw-win, dhw-roof
+roof, roof-env, roof-win,
 */
 const OPTIMISE bool = false
 
@@ -61,13 +61,13 @@ func main() {
 		Do helpers
 	*/
 	var ph *helpers.PrintHelper = helpers.CreatePrintHelper(true)
-	ph.P("======\n\tStarting process using data from: " + GA_PATH + "\n======\n\n")
+	ph.Line("====== Starting process using data from: " + GA_PATH + " ======")
 
 	/*
 		Parse main data
 	*/
 	var data csv.BuildingReader = csv.ParseBuildingCSV(GA_PATH, false)
-	ph.P("Data loaded - " + strconv.Itoa(data.Length()) + " records")
+	ph.Line("Data loaded - " + strconv.Itoa(data.Length()) + " records")
 
 	/*
 		Subtract original ratings from all values
@@ -97,7 +97,7 @@ func main() {
 		Remove corrupt Buildings
 	*/
 	data.RemoveCorrupt()
-	ph.P("Data cleansed - " + strconv.Itoa(data.Length()) + " records")
+	ph.Line("Data cleansed - " + strconv.Itoa(data.Length()) + " records")
 	data = *data.Sample(0.5)
 	if OPTIMISE {
 		var bayesOpt optimiser.GAOptimiser = optimiser.CreateBayesOptimiser()
@@ -119,7 +119,9 @@ func main() {
 					epcGA.CrossoverRate = float32(value)
 				}
 			}
-			epcGA.Run()
+			epcGA.Run(func(candidate1, candidate2 ga.GAState) bool {
+				return true
+			}, func(candidate ga.GAState) bool { return true })
 			/*
 				fmt.Println("V:" + strconv.FormatFloat(epcGA.ScoreGAstate(0),'f',2,64))
 			*/
@@ -139,8 +141,13 @@ func main() {
 		var epcGA *ga.EpcGA = ga.CreateEpcGA(&data, 100, 40, RETROFIT_TARGET_LABELS)
 		epcGA.Hardness = 0.110466
 		epcGA.CrossoverRate = 0.191076
-		ph.P("EPC-GA instantiated")
-		epcGA.Run()
+		ph.Line("EPC-GA instantiated")
+		/*
+			This is the GA entry point for the case study
+		*/
+		epcGA.Run(func(candidate1, candidate2 ga.GAState) bool {
+			return candidate1.Score() > 0
+		}, func(candidate ga.GAState) bool { return true })
 	}
 }
 func doWeatherNN() {

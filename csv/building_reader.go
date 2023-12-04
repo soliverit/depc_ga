@@ -71,7 +71,7 @@ func ParseBuildingCSV(path string, skipCorruptRecords bool) BuildingReader {
 }
 
 /*
-	Get Row
+Get Row
 */
 func (bReader *BuildingReader) Row(idx int) *Building {
 	return &bReader.rows[idx]

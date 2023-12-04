@@ -27,7 +27,7 @@ type EpcGA struct {
 }
 
 /*
-	Create a new EpcGA, an extension of BaseGA for residential EPC data
+Create a new epcGAA, an extension of Baseg for residential EPC data
 */
 func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int, packages []string) *EpcGA {
 	/*
@@ -97,7 +97,7 @@ func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int,
 	*/
 	return &epcGA
 }
-func (ga *EpcGA) Best() float32 {
+func (g *EpcGA) Best() float32 {
 	var building *csv.Building
 	/*
 		Get header positions
@@ -107,66 +107,72 @@ func (ga *EpcGA) Best() float32 {
 	var tempScore float32 = 0.0
 	var tempRatingIDX int = 0
 	var testScore float32
-	for i := 0; i < ga.data.Length(); i++ {
-		building = ga.data.Building(i)
-		for j := 0; j < len(ga.effHeaders); j++ {
-			testScore = building.Cell(ga.effHeaderIndices[j]) / building.Cell(ga.costHeaderIndices[j])
+	for i := 0; i < g.data.Length(); i++ {
+		building = g.data.Building(i)
+		for j := 0; j < len(g.effHeaders); j++ {
+			testScore = building.Cell(g.effHeaderIndices[j]) / building.Cell(g.costHeaderIndices[j])
 			if testScore > tempScore {
 				tempScore = testScore
 				tempRatingIDX = j
 			}
 		}
-		score += building.Cell(ga.costHeaderIndices[tempRatingIDX]) /
-			building.Cell(ga.effHeaderIndices[tempRatingIDX])
-		cost += building.Cell(ga.costHeaderIndices[tempRatingIDX])
+		score += building.Cell(g.costHeaderIndices[tempRatingIDX]) /
+			building.Cell(g.effHeaderIndices[tempRatingIDX])
+		cost += building.Cell(g.costHeaderIndices[tempRatingIDX])
 	}
 	return score
 }
-func (ga *EpcGA) Run() {
+func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective func(gaState GAState) bool) {
 	var ph helpers.PrintHelper
 	/*
 		Create Life! (default-state GAState)
 	*/
-	var stateRecords []GAStateRecord = make([]GAStateRecord, ga.data.Length())
-	for i := 0; i < ga.data.Length(); i++ {
+	var stateRecords []GAStateRecord = make([]GAStateRecord, g.data.Length())
+	for i := 0; i < g.data.Length(); i++ {
 		stateRecords[i] = CreateGAStateRecord(-1, -1)
 	}
 	var baseGAState = CreateGAState(stateRecords)
 
-	for i := 0; i < ga.maxPopulation; i++ {
-		ga.population[i] = ga.CreateMutation(baseGAState)
+	for i := 0; i < g.maxPopulation; i++ {
+		g.population[i] = g.CreateMutation(baseGAState)
 	}
 	/*
 		Do the main process
 	*/
-	var candidateStates []GAState = make([]GAState, ga.maxPopulation*ga.childCount+ga.maxPopulation)
+	var candidateStates []GAState = make([]GAState, g.maxPopulation*g.childCount+g.maxPopulation)
 	//Add existing population to the candidates (immortality exists apparently)
-	for i := 0; i < ga.maxPopulation; i++ {
-		candidateStates[i] = ga.population[i]
+	for i := 0; i < g.maxPopulation; i++ {
+		candidateStates[i] = g.population[i]
 	}
 	var randomInt int
 	/*=====================
 		Temp, delete log file
 	=======================*/
 
-	for roundID := 0; roundID < ga.iterations; roundID++ {
-		for i := 0; i < len(ga.population); i++ {
-			for childID := 0; childID < ga.childCount; childID++ {
-				if rand.Float32() < ga.CrossoverRate {
+	for roundID := 0; roundID < g.iterations; roundID++ {
+		for i := 0; i < len(g.population); i++ {
+			for childID := 0; childID < g.childCount; childID++ {
+				if rand.Float32() < g.CrossoverRate {
 					/*
 						Find another GAState to procreate with (bow chaka wow wow!)
 					*/
 					randomInt = i
 					for randomInt == i {
-						randomInt = rand.Intn(len(ga.population))
+						randomInt = rand.Intn(len(g.population))
 					}
-					candidateStates[ga.maxPopulation+i*ga.childCount+childID] = ga.Crossover(
-						ga.population[i],
-						ga.population[randomInt])
+					candidateStates[g.maxPopulation+i*g.childCount+childID] = g.Crossover(
+						g.population[i],
+						g.population[randomInt])
 				} else {
-					candidateStates[ga.maxPopulation+i*ga.childCount+childID] = ga.CreateMutation(ga.population[i])
+					candidateStates[g.maxPopulation+i*g.childCount+childID] = g.CreateMutation(g.population[i])
 				}
 			}
+		}
+		/*
+			Score the states: Scores are cached in the GAState so you don't need to run it again.
+		*/
+		for i := 0; i < len(candidateStates); i++ {
+			g.scorer.Score(&candidateStates[i]) // Caches results. Doesn't redo every iteration
 		}
 		/*
 			TOURNAMENT TIME!
@@ -174,29 +180,48 @@ func (ga *EpcGA) Run() {
 			Ok, time to literally decimate, or at least n-imate the
 			population.
 
-			Simple tournament: There are N competitors but only EpcGA.maxPopulation
-			spaces in society. Highest EpcGA.maxPopulation results get to live
+			Simple tournament: There are N competitors but only epcGA.maxPopulation
+			spaces in society. Highest epcGA.maxPopulation results get to live
 		*/
 		sort.Slice(candidateStates, func(i, j int) bool {
-			return ga.scorer.Score(&candidateStates[i]) < ga.scorer.Score(&candidateStates[j])
+			candidate1 := &candidateStates[i]
+			candidate2 := &candidateStates[j]
+
+			g.scorer.Score(candidate2) // Caches results. Doesn't redo every iteration
+			return g.scorer.Score(candidate1) < g.scorer.Score(candidate2)
 		})
-		ga.population = candidateStates[0 : ga.maxPopulation-1]
+		/*
+			Sort candidates by objective. This ensures that candidates are sorted by score first,
+			then by whether they meet the objective. Doesn't matter for simple objectives like
+			score greater than but for thresholds like savedPoints > x.
+		*/
+		//var meetObjective []GAState = make([]GAState, 0)
+		//var doesntMeetObjective []GAState = make([]GAState, 0)
+		//for i := 0; i < len(candidateStates); i++ {
+		//	if objective(&candidateStates[i]) {
+		//		meetObjective = append(meetObjective, candidateStates[i])
+		//	} else {
+		//		doesntMeetObjective = append(doesntMeetObjective, candidateStates[i])
+		//	}
+		//}
+		//candidateStates = append(meetObjective, doesntMeetObjective...)
+		g.population = candidateStates[0 : g.maxPopulation-1]
 		/*
 			Print and log stuff
 		*/
-
-		ph.WriteToFile(ga.population[0].ToCSV(), LOG_PATH)
+		ph.WriteToFile(g.population[0].ToCSV(), LOG_PATH)
 	}
-	ph.P("Scored: " + ga.population[0].ToCSV())
+	//ph.P("Scored: " + g.population[0].ToCSV())
+	g.population[0].Print()
 }
-func (ga *EpcGA) ScoreGAstate(populationID int) float64 {
-	return float64(ga.scorer.Score(&ga.population[populationID]))
+func (g *EpcGA) ScoreGAstate(populationID int) float64 {
+	return float64(g.scorer.Score(&g.population[populationID]))
 }
-func (ga *EpcGA) Crossover(state1 GAState, state2 GAState) GAState {
+func (g *EpcGA) Crossover(state1 GAState, state2 GAState) GAState {
 
-	var states []GAStateRecord = make([]GAStateRecord, ga.data.Length())
-	for i := 0; i < ga.data.Length(); i++ {
-		if rand.Float32() < ga.CrossoverRate {
+	var states []GAStateRecord = make([]GAStateRecord, g.data.Length())
+	for i := 0; i < g.data.Length(); i++ {
+		if rand.Float32() < g.CrossoverRate {
 			states[i] = CreateGAStateRecord(
 				state2.entityStates[i].efficiencyIndex,
 				state2.entityStates[i].costIndex)
@@ -210,26 +235,26 @@ func (ga *EpcGA) Crossover(state1 GAState, state2 GAState) GAState {
 }
 
 /*
-	Create a new mutation
+Create a new mutation
 */
-func (ga *EpcGA) CreateMutation(baseState GAState) GAState {
+func (g *EpcGA) CreateMutation(baseState GAState) GAState {
 	var rnd float32
 	var stateIDX int
-	var states []GAStateRecord = make([]GAStateRecord, ga.data.Length())
+	var states []GAStateRecord = make([]GAStateRecord, g.data.Length())
 
-	for i := 0; i < ga.data.Length(); i++ {
+	for i := 0; i < g.data.Length(); i++ {
 		rnd = rand.Float32()
-		if ga.Hardness > rnd {
+		if g.Hardness > rnd {
 
-			stateIDX = rand.Intn(len(ga.effHeaderIndices)) - 1
+			stateIDX = rand.Intn(len(g.effHeaderIndices)) - 1
 			if stateIDX == -1 {
 				states[i] = CreateGAStateRecord(
 					-1,
 					-1)
 			} else {
 				states[i] = CreateGAStateRecord(
-					ga.effHeaderIndices[stateIDX],
-					ga.costHeaderIndices[stateIDX])
+					g.effHeaderIndices[stateIDX],
+					g.costHeaderIndices[stateIDX])
 			}
 		} else {
 			states[i] = CreateGAStateRecord(
