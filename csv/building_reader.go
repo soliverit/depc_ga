@@ -64,9 +64,6 @@ func ParseBuildingCSV(path string, skipCorruptRecords bool) BuildingReader {
 	if curPos < len(csv) {
 		bReader.rows = append(bReader.rows, CreateBuilding(string(csv[curPos:len(csv)-curPos])))
 	}
-	println("????")
-	println(bReader.Headers().ToString())
-	println("???")
 	return bReader
 }
 
@@ -104,6 +101,20 @@ func (bReader *BuildingReader) WriteToFile(path string) {
 		file.WriteString("\n" + bReader.Building(i).ToString())
 	}
 	file.Close()
+}
+func (bReader *BuildingReader) PrepareRetrofits(retrofitAliases []string) {
+	for retrofitAliasID := 0; retrofitAliasID < len(retrofitAliases); retrofitAliasID++ {
+		costColumnID := bReader.EasyReader.ColumnNameToIndex(retrofitAliases[retrofitAliasID] + RETROFIT_COST_ALIAS_SUFFIX)
+		effColumnID := bReader.EasyReader.ColumnNameToIndex(retrofitAliases[retrofitAliasID] + RETROFIT_EFF_ALIAS_SUFFIX)
+		for buildingID := 0; buildingID < bReader.Length(); buildingID++ {
+			building := bReader.Building(buildingID)
+			if building.Cell(costColumnID) != -1 {
+				cost := building.Cell(costColumnID)
+				eff := building.Cell(effColumnID)
+				building.AddRetrofit(CreateRetrofit(retrofitAliases[retrofitAliasID], cost, eff, eff-building.epcIndex))
+			}
+		}
+	}
 }
 func (bReader *BuildingReader) Sample(size float32) *BuildingReader {
 	var length int = int(float32(bReader.Length()) * size)
