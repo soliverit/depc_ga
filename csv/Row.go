@@ -25,6 +25,9 @@ func StringToRow(str string) Row {
 	str = strings.TrimSpace(str)
 	/*
 		Parse cells
+
+		TODO: Why'd you use uint32 for i. Must be something to do with the inter but can't remember. First
+		TODO: script so don't sweat it.
 	*/
 	for i := uint32(0); i < uint32(len(str)); i++ {
 		/*
@@ -39,6 +42,8 @@ func StringToRow(str string) Row {
 			if str[i] == ',' {
 				cells = append(cells, str[curPos:i])
 				curPos = 1 + i
+			} else if i+1 == uint32(len(str)) {
+				cells = append(cells, str[curPos:i+1])
 			} else {
 				if str[i] == '"' {
 					inString = true
@@ -51,14 +56,14 @@ func StringToRow(str string) Row {
 }
 
 /*
-	Get Cell value
+Get Cell value
 */
 func (row *Row) Cell(idx int) string {
 	return row.cells[idx]
 }
 
 /*
-	To String!
+To String!
 */
 func (row *Row) ToString() string {
 	return strings.Join(row.cells, ",")
