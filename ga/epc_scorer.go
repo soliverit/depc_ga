@@ -19,7 +19,7 @@ func CreateEPCScorer(data *csv.BuildingReader) *EPCScorer {
 }
 
 /*
-	Score the input GAState
+Score the input GAState
 */
 func (epcScorer *EPCScorer) Score(gaState *GAState) float32 {
 	/*
@@ -36,10 +36,9 @@ func (epcScorer *EPCScorer) Score(gaState *GAState) float32 {
 	for i := 0; i < data.Length(); i++ {
 		building = epcScorer.data.Building(i)
 		stateRecord = gaState.RowState(i)
-		if stateRecord.EfficiencyIndex() != -1 {
-			cost += building.Cell(stateRecord.CostIndex())
-			points += building.Cell(stateRecord.EfficiencyIndex())
-		}
+
+		cost += building.Retrofit(stateRecord.OptionID()).Cost()
+		points += building.Retrofit(stateRecord.OptionID()).Reduction()
 	}
 	/*
 		Cache the total cost in the GAState and return it.

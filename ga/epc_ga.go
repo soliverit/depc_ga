@@ -2,7 +2,6 @@ package ga
 
 import (
 	"../csv"
-	"../helpers"
 	"math/rand"
 	"sort"
 )
@@ -22,8 +21,9 @@ type EpcGA struct {
 	population        []GAState
 	initialPopulation int
 	CrossoverRate     float32
-	childCount        int
+	ChildCount        int
 	maxPopulation     int
+	ForceMaxPoints    bool
 }
 
 /*
@@ -45,7 +45,7 @@ func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int,
 
 		-------- Best ---
 		crossoverRate:	0.15
-		childCount:		10
+		ChildCount:		10
 		maxPopulation:	30
 		hardness:		0.1
 	*/
@@ -53,8 +53,9 @@ func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int,
 	epcGA.maxPopulation = maxPopulation
 	epcGA.population = make([]GAState, epcGA.maxPopulation)
 	epcGA.CrossoverRate = 0.15
-	epcGA.childCount = 10
+	epcGA.ChildCount = 10
 	epcGA.Hardness = 0.1 //Best 0.1 with crossoverRate of 0.15
+	epcGA.ForceMaxPoints = false
 	//Prepare arrays TODO: See below, put in Struct
 	epcGA.costHeaders = make([]string, len(packages))
 	epcGA.effHeaders = make([]string, len(packages))
@@ -123,13 +124,31 @@ func (g *EpcGA) Best() float32 {
 	return score
 }
 func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective func(gaState GAState) bool) {
-	var ph helpers.PrintHelper
 	/*
 		Create Life! (default-state GAState)
+
+		Ok, so it's a multi-objective optimisation problem meaning there's multiple objectives,
+		obviously. So, if we start with as-built or random, we might not find any solutions that
+		meet the objective. To get round this, we guarantee there's some solutions found by making
+		the initial population full of shit but objective-meeting GAState.
+
+		# That said, there needs to be shit options in the start population
 	*/
 	var stateRecords []GAStateRecord = make([]GAStateRecord, g.data.Length())
-	for i := 0; i < g.data.Length(); i++ {
-		stateRecords[i] = CreateGAStateRecord(-1, -1)
+	for buildingID := 0; buildingID < g.data.Length(); buildingID++ {
+
+		var bestReduction float32 = 0
+		var bestRetrofitID = 0
+		for retrofitID := 0; retrofitID < g.data.Building(buildingID).NumberOfRetrofits(); retrofitID++ {
+			if g.data.Building(buildingID).Retrofit(retrofitID).Reduction() > bestReduction {
+				bestRetrofitID = retrofitID
+			}
+		}
+		if buildingID%2 == 0 {
+			stateRecords[buildingID] = CreateGAStateRecord(bestRetrofitID)
+		} else {
+			stateRecords[buildingID] = CreateGAStateRecord(0)
+		}
 	}
 	var baseGAState = CreateGAState(stateRecords)
 
@@ -139,7 +158,7 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 	/*
 		Do the main process
 	*/
-	var candidateStates []GAState = make([]GAState, g.maxPopulation*g.childCount+g.maxPopulation)
+	var candidateStates []GAState = make([]GAState, g.maxPopulation*g.ChildCount+g.maxPopulation)
 	//Add existing population to the candidates (immortality exists apparently)
 	for i := 0; i < g.maxPopulation; i++ {
 		candidateStates[i] = g.population[i]
@@ -151,7 +170,7 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 
 	for roundID := 0; roundID < g.iterations; roundID++ {
 		for i := 0; i < len(g.population); i++ {
-			for childID := 0; childID < g.childCount; childID++ {
+			for childID := 0; childID < g.ChildCount; childID++ {
 				if rand.Float32() < g.CrossoverRate {
 					/*
 						Find another GAState to procreate with (bow chaka wow wow!)
@@ -160,11 +179,11 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 					for randomInt == i {
 						randomInt = rand.Intn(len(g.population))
 					}
-					candidateStates[g.maxPopulation+i*g.childCount+childID] = g.Crossover(
+					candidateStates[g.maxPopulation+i*g.ChildCount+childID] = g.Crossover(
 						g.population[i],
 						g.population[randomInt])
 				} else {
-					candidateStates[g.maxPopulation+i*g.childCount+childID] = g.CreateMutation(g.population[i])
+					candidateStates[g.maxPopulation+i*g.ChildCount+childID] = g.CreateMutation(g.population[i])
 				}
 			}
 		}
@@ -183,12 +202,9 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 			Simple tournament: There are N competitors but only epcGA.maxPopulation
 			spaces in society. Highest epcGA.maxPopulation results get to live
 		*/
+		// NOTE/WARNING: This wouldn't work if we hadn't called ga.scorer.Score() on all candidates a few lines ago. See above
 		sort.Slice(candidateStates, func(i, j int) bool {
-			candidate1 := &candidateStates[i]
-			candidate2 := &candidateStates[j]
-
-			g.scorer.Score(candidate2) // Caches results. Doesn't redo every iteration
-			return g.scorer.Score(candidate1) < g.scorer.Score(candidate2)
+			return sorter(candidateStates[i], candidateStates[j])
 		})
 		/*
 			Sort candidates by objective. This ensures that candidates are sorted by score first,
@@ -196,20 +212,16 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 			score greater than but for thresholds like savedPoints > x.
 		*/
 		//var meetObjective []GAState = make([]GAState, 0)
-		//var doesntMeetObjective []GAState = make([]GAState, 0)
 		//for i := 0; i < len(candidateStates); i++ {
-		//	if objective(&candidateStates[i]) {
+		//	if objective(candidateStates[i]) {
 		//		meetObjective = append(meetObjective, candidateStates[i])
-		//	} else {
-		//		doesntMeetObjective = append(doesntMeetObjective, candidateStates[i])
 		//	}
 		//}
-		//candidateStates = append(meetObjective, doesntMeetObjective...)
+		//if len(meetObjective) > 0 {
+		//	candidateStates = meetObjective
+		//}
+
 		g.population = candidateStates[0 : g.maxPopulation-1]
-		/*
-			Print and log stuff
-		*/
-		ph.WriteToFile(g.population[0].ToCSV(), LOG_PATH)
 	}
 	//ph.P("Scored: " + g.population[0].ToCSV())
 	g.population[0].Print()
@@ -222,13 +234,9 @@ func (g *EpcGA) Crossover(state1 GAState, state2 GAState) GAState {
 	var states []GAStateRecord = make([]GAStateRecord, g.data.Length())
 	for i := 0; i < g.data.Length(); i++ {
 		if rand.Float32() < g.CrossoverRate {
-			states[i] = CreateGAStateRecord(
-				state2.entityStates[i].efficiencyIndex,
-				state2.entityStates[i].costIndex)
+			states[i] = CreateGAStateRecord(state2.entityStates[i].optionID)
 		} else {
-			states[i] = CreateGAStateRecord(
-				state1.entityStates[i].efficiencyIndex,
-				state1.entityStates[i].costIndex)
+			states[i] = CreateGAStateRecord(state1.entityStates[i].optionID)
 		}
 	}
 	return CreateGAState(states)
@@ -243,23 +251,14 @@ func (g *EpcGA) CreateMutation(baseState GAState) GAState {
 	var states []GAStateRecord = make([]GAStateRecord, g.data.Length())
 
 	for i := 0; i < g.data.Length(); i++ {
+		building := g.data.Building(i)
 		rnd = rand.Float32()
 		if g.Hardness > rnd {
 
-			stateIDX = rand.Intn(len(g.effHeaderIndices)) - 1
-			if stateIDX == -1 {
-				states[i] = CreateGAStateRecord(
-					-1,
-					-1)
-			} else {
-				states[i] = CreateGAStateRecord(
-					g.effHeaderIndices[stateIDX],
-					g.costHeaderIndices[stateIDX])
-			}
+			stateIDX = rand.Intn(building.NumberOfRetrofits())
+			states[i] = CreateGAStateRecord(stateIDX)
 		} else {
-			states[i] = CreateGAStateRecord(
-				baseState.entityStates[i].efficiencyIndex,
-				baseState.entityStates[i].costIndex)
+			states[i] = CreateGAStateRecord(baseState.entityStates[i].optionID)
 		}
 	}
 

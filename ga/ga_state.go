@@ -1,6 +1,7 @@
 package ga
 
 import "strconv"
+import "../helpers"
 
 /*
 A record of the GA datasets state
@@ -12,7 +13,6 @@ type GAState struct {
 	points       float32
 	cost         float32
 	scored       bool
-	Shoe         int
 }
 
 /*
@@ -24,7 +24,6 @@ func CreateGAState(states []GAStateRecord) GAState {
 		Set properties from inputs
 	*/
 	gaState.entityStates = states
-
 	/*
 		Defaults
 	*/
@@ -38,10 +37,9 @@ func CreateGAState(states []GAStateRecord) GAState {
 /*
 Retrieve the cost
 */
-func (GState *GAState) Fire() bool { return true }
-func (gaState *GAState) Score() float32 {
-	return gaState.score
-}
+func (gaState *GAState) Score() float32  { return gaState.score }
+func (gaState *GAState) Points() float32 { return gaState.points }
+func (gaState *GAState) Cost() float32   { return gaState.cost }
 func (gaState *GAState) Scored() bool {
 	return gaState.scored
 }
@@ -75,10 +73,13 @@ func (gaState *GAState) ToCSV() string {
 }
 func (gaState *GAState) Print() {
 	if gaState.scored {
-		print("Score:\t" + strconv.FormatFloat(float64(gaState.score), 'f', 4, 32) + "\n")
-		print("Points:\t" + strconv.FormatFloat(float64(gaState.points), 'f', 4, 32) + "\n")
-		print("Cost:\t" + strconv.FormatFloat(float64(gaState.cost), 'f', 4, 32) + "\n")
-		print("P/C:\t" + strconv.FormatFloat(float64(gaState.points)/float64(gaState.cost), 'f', 4, 32) + "\n")
-		print("C/P:\t" + strconv.FormatFloat(float64(gaState.cost)/float64(gaState.points), 'f', 4, 32) + "\n")
+		var row []string = make([]string, 0)
+		row = append(row, strconv.FormatFloat(float64(gaState.score), 'f', 0, 32))
+		row = append(row, strconv.FormatFloat(float64(gaState.points), 'f', 0, 32))
+		row = append(row, strconv.FormatFloat(float64(gaState.cost), 'f', 0, 32))
+		row = append(row, strconv.FormatFloat(float64(gaState.points)/float64(gaState.cost), 'f', 1, 32))
+		row = append(row, strconv.FormatFloat(float64(gaState.cost)/float64(gaState.points), 'f', 1, 32))
+
+		helpers.PrintRow(row, 15)
 	}
 }
