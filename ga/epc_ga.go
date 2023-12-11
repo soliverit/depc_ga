@@ -4,14 +4,17 @@ import (
 	"../csv"
 	"math/rand"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 const LOG_PATH string = "c:/repos/ga_results.txt"
 
 type EpcGA struct {
 	BaseGA
-	data   *csv.BuildingReader
-	scorer *EPCScorer
+	data        *csv.BuildingReader
+	scorer      *EPCScorer
+	Description string
 	//Building state options
 	buildingRetorfits [][]int
 	effHeaders        []string
@@ -24,6 +27,8 @@ type EpcGA struct {
 	ChildCount        int
 	maxPopulation     int
 	ForceMaxPoints    bool
+	// RandCache
+	RandCache RandCache
 }
 
 /*
@@ -93,6 +98,12 @@ func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int,
 		}
 
 	}
+	/*
+		RandCache stuff
+
+		Why 13? because fuck it, why not? Just need a Seed and value size for the default instance
+	*/
+	epcGA.RandCache = CreateRandCache(epcGA.data.Length(), int(epcGA.data.Length()*13))
 	/*
 		Send it home
 	*/
@@ -171,7 +182,7 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 	for roundID := 0; roundID < g.iterations; roundID++ {
 		for i := 0; i < len(g.population); i++ {
 			for childID := 0; childID < g.ChildCount; childID++ {
-				if rand.Float32() < g.CrossoverRate {
+				if g.RandCache.Next() < g.CrossoverRate {
 					/*
 						Find another GAState to procreate with (bow chaka wow wow!)
 					*/
@@ -190,6 +201,7 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 		/*
 			Score the states: Scores are cached in the GAState so you don't need to run it again.
 		*/
+		//TODO: Remove the len() call for a static value
 		for i := 0; i < len(candidateStates); i++ {
 			g.scorer.Score(&candidateStates[i]) // Caches results. Doesn't redo every iteration
 		}
@@ -233,7 +245,7 @@ func (g *EpcGA) Crossover(state1 GAState, state2 GAState) GAState {
 
 	var states []GAStateRecord = make([]GAStateRecord, g.data.Length())
 	for i := 0; i < g.data.Length(); i++ {
-		if rand.Float32() < g.CrossoverRate {
+		if g.RandCache.Next() < g.CrossoverRate {
 			states[i] = CreateGAStateRecord(state2.entityStates[i].optionID)
 		} else {
 			states[i] = CreateGAStateRecord(state1.entityStates[i].optionID)
@@ -252,7 +264,7 @@ func (g *EpcGA) CreateMutation(baseState GAState) GAState {
 
 	for i := 0; i < g.data.Length(); i++ {
 		building := g.data.Building(i)
-		rnd = rand.Float32()
+		rnd = g.RandCache.Next()
 		if g.Hardness > rnd {
 
 			stateIDX = rand.Intn(building.NumberOfRetrofits())
@@ -266,4 +278,94 @@ func (g *EpcGA) CreateMutation(baseState GAState) GAState {
 		Send it home
 	*/
 	return CreateGAState(states)
+}
+
+//	func (g *EpcGA) CSVResultsRow() string {
+//		var row string = g.Description
+//		row += "," + strconv.FormatFloat(float64(g.population[0].score), 'f', 0, 32)
+//		row += "," + strconv.FormatFloat(float64(g.population[0].points), 'f', 0, 32)
+//		row += "," + strconv.FormatFloat(float64(g.population[0].cost), 'f', 0, 32)
+//	}
+func (g *EpcGA) CSVResultsString(retrofitAliases []string, id int) string {
+	//var singleOptionKeys []string = make([]string, 0)
+	var retrofitData map[string]float32 = make(map[string]float32)
+	var basicCounters = make(map[string]int)
+	for buildingID := 0; buildingID < g.data.Length(); buildingID++ {
+		building := g.data.Building(buildingID)
+
+		retrofit := building.Retrofit(g.population[id].entityStates[buildingID].OptionID())
+		// Basics
+		retrofitData[retrofit.Alias()] += 1
+		retrofitData[retrofit.Alias()+"-Cost"] += retrofit.Cost()
+		retrofitData[retrofit.Alias()+"-Reduction"] += retrofit.Reduction()
+		// Components
+		parts := strings.SplitN(retrofit.Alias(), "_", -1)
+		for partID := 0; partID < len(parts); partID++ {
+			basicCounters[parts[partID]] += 1
+		}
+		//if strings.Contains(retrofit.Alias(), "envelopes") {
+		//	subRetrofit := building.FindRetrofit("envelopes")
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Count"] += 1
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Cost"] += retrofit.Cost()
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Reduction"] += retrofit.Reduction()
+		//}
+		//if strings.Contains(retrofit.Alias(), "hotwater") {
+		//	subRetrofit := building.FindRetrofit("hotwater")
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Count"] += 1
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Cost"] += retrofit.Cost()
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Reduction"] += retrofit.Reduction()
+		//}
+		//if strings.Contains(retrofit.Alias(), "roof") {
+		//	subRetrofit := building.FindRetrofit("roof")
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Count"] += 1
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Cost"] += retrofit.Cost()
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Reduction"] += retrofit.Reduction()
+		//}
+		//if strings.Contains(retrofit.Alias(), "windows") {
+		//	subRetrofit := building.FindRetrofit("windows")
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Count"] += 1
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Cost"] += retrofit.Cost()
+		//	retrofitData[subRetrofit.Alias()+"-Compound-Reduction"] += retrofit.Reduction()
+		//}
+	}
+	/*
+		Format string
+	*/
+	var reductions string
+	var costs string
+	var counts string
+	for retrofitAliasID := 0; retrofitAliasID < len(retrofitAliases); retrofitAliasID++ {
+		costKey := retrofitAliases[retrofitAliasID] + "-Cost"
+		countKey := retrofitAliases[retrofitAliasID]
+		reductionKey := retrofitAliases[retrofitAliasID] + "-Reduction"
+		reductions += strconv.FormatFloat(float64(retrofitData[reductionKey]), 'f', 0, 64)
+		counts += strconv.FormatFloat(float64(retrofitData[countKey]), 'f', 0, 64)
+		costs += strconv.FormatFloat(float64(retrofitData[costKey]), 'f', 0, 64)
+		if retrofitAliasID+1 != len(retrofitAliases) {
+			reductions += ","
+			counts += ","
+			costs += ","
+		}
+	}
+	var sums string
+	sums += strconv.FormatFloat(float64(g.population[id].score), 'f', 0, 64) + ","
+	sums += strconv.FormatFloat(float64(g.population[id].points), 'f', 0, 64) + ","
+	sums += strconv.FormatFloat(float64(g.population[id].cost), 'f', 0, 64)
+	var compounds string
+	compounds += strconv.Itoa(basicCounters["envelopes"]) + "," // strconv.FormatFloat(float64(retrofitData["envelopes-Compound-Count"]), 'f', 0, 64) + ","
+	compounds += strconv.Itoa(basicCounters["hotwater"]) + ","  //strconv.FormatFloat(float64(retrofitData["hotwater-Compound-Count"]), 'f', 0, 64) + ","
+	compounds += strconv.Itoa(basicCounters["roof"]) + ","      //strconv.FormatFloat(float64(retrofitData["roof-Compound-Count"]), 'f', 0, 64) + ","
+	compounds += strconv.Itoa(basicCounters["windows"]) + ","   //strconv.FormatFloat(float64(retrofitData["windows-Compound-Count"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["envelopes-Compound-Cost"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["hotwater-Compound-Cost"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["roof-Compound-Cost"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["windows-Compound-Cost"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["envelopes-Compound-Reduction"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["hotwater-Compound-Reduction"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["roof-Compound-Reduction"]), 'f', 0, 64) + ","
+	compounds += strconv.FormatFloat(float64(retrofitData["windows-Compound-Reduction"]), 'f', 0, 64)
+	var params string
+	params += strconv.FormatFloat(float64(g.CrossoverRate), 'f', 8, 64) + ","
+	params += strconv.FormatFloat(float64(g.Hardness), 'f', 8, 64)
+	return sums + "," + counts + "," + costs + "," + reductions + "," + compounds + params
 }
