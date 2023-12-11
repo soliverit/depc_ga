@@ -28,7 +28,8 @@ type EpcGA struct {
 	maxPopulation     int
 	ForceMaxPoints    bool
 	// RandCache
-	RandCache RandCache
+	RandCache              RandCache
+	PopulationRandIntCache RandIntCache
 }
 
 /*
@@ -103,7 +104,8 @@ func CreateEpcGA(bReader *csv.BuildingReader, iterations int, maxPopulation int,
 
 		Why 13? because fuck it, why not? Just need a Seed and value size for the default instance
 	*/
-	epcGA.RandCache = CreateRandCache(epcGA.data.Length(), int(epcGA.data.Length()*13))
+	epcGA.RandCache = CreateRandCache(epcGA.data.Length(), int(float32(epcGA.data.Length())*13.5))
+	epcGA.PopulationRandIntCache = CreateRandIntCache(epcGA.data.Length(), epcGA.maxPopulation, int(float32(epcGA.maxPopulation)*113.5))
 	/*
 		Send it home
 	*/
@@ -178,8 +180,18 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 	/*=====================
 		Temp, delete log file
 	=======================*/
-
+	var scoreCounter int
+	go func() {
+		for {
+			if len(candidateStates) > scoreCounter {
+				g.scorer.Score(&candidateStates[scoreCounter])
+				scoreCounter++
+			}
+		}
+	}()
 	for roundID := 0; roundID < g.iterations; roundID++ {
+		//scoreCounter = 0
+
 		for i := 0; i < len(g.population); i++ {
 			for childID := 0; childID < g.ChildCount; childID++ {
 				if g.RandCache.Next() < g.CrossoverRate {
@@ -188,7 +200,7 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 					*/
 					randomInt = i
 					for randomInt == i {
-						randomInt = rand.Intn(len(g.population))
+						randomInt = g.PopulationRandIntCache.Next()
 					}
 					candidateStates[g.maxPopulation+i*g.ChildCount+childID] = g.Crossover(
 						g.population[i],
@@ -197,6 +209,7 @@ func (g *EpcGA) Run(sorter func(candidate1, candidate2 GAState) bool, objective 
 					candidateStates[g.maxPopulation+i*g.ChildCount+childID] = g.CreateMutation(g.population[i])
 				}
 			}
+
 		}
 		/*
 			Score the states: Scores are cached in the GAState so you don't need to run it again.
